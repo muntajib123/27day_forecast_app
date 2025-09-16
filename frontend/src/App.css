@@ -1,0 +1,172 @@
+/* NASA THEME + DARK SPACE UI */
+
+body {
+  margin: 0;
+  padding: 0;
+  font-family: "NASA", "Orbitron", "Segoe UI", sans-serif;
+  background-color: #0b0f1f;
+  color: #dbeafe;
+  transition: background-color 0.4s ease, color 0.4s ease;
+  background-image: radial-gradient(circle at top left, #121d42, #0b0f1f);
+  background-attachment: fixed;
+}
+
+.app-container {
+  padding: 30px 20px;
+  min-height: 100vh;
+}
+
+.app-header {
+  text-align: center;
+  margin-bottom: 40px;
+}
+
+.app-header h1 {
+  font-size: 2.8rem;
+  color: #57c7ff;
+  letter-spacing: 1px;
+  text-shadow: 0 0 8px rgba(87, 199, 255, 0.5);
+}
+
+.app-header p {
+  font-size: 1.2rem;
+  color: #8ab4f8;
+}
+
+/* Toggle Button */
+.toggle-button {
+  margin-top: 15px;
+  background: linear-gradient(145deg, #004e89, #0077b6);
+  color: #fff;
+  border: none;
+  padding: 10px 25px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 1rem;
+  transition: background-color 0.3s ease, transform 0.3s ease;
+  box-shadow: 0 4px 10px rgba(0, 174, 255, 0.3);
+}
+
+.toggle-button:hover {
+  background-color: #00b4d8;
+  transform: scale(1.05);
+}
+
+/* Inputs */
+input[type="file"],
+input[type="text"] {
+  border-radius: 8px;
+  padding: 10px;
+  border: 1px solid #666;
+  background-color: #1c2331;
+  color: #fff;
+  font-size: 1rem;
+  outline: none;
+  transition: border 0.3s ease;
+}
+
+input[type="text"]:focus {
+  border-color: #57c7ff;
+}
+
+/* Forecast + Chart Cards */
+.forecast-section,
+.chart-section {
+  margin: 0 auto;
+  max-width: 1200px;
+  background: rgba(15, 23, 42, 0.95);
+  padding: 25px;
+  border-radius: 12px;
+  box-shadow: 0 6px 20px rgba(87, 199, 255, 0.2);
+  margin-bottom: 40px;
+}
+
+/* Table */
+.forecast-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 10px;
+  background-color: transparent;
+}
+
+.forecast-table th,
+.forecast-table td {
+  padding: 12px;
+  text-align: center;
+  border-bottom: 1px solid rgba(87, 199, 255, 0.2);
+}
+
+.forecast-table th {
+  background-color: #004e89;
+  color: #ffffff;
+  font-size: 1rem;
+  text-shadow: 0 0 4px rgba(255, 255, 255, 0.2);
+}
+
+.forecast-table tr:nth-child(even) {
+  background-color: rgba(255, 255, 255, 0.02);
+}
+
+/* Chart Container */
+.chart-container {
+  margin-top: 20px;
+}
+
+.chart-fade-in {
+  animation: fadeIn 0.6s ease-in-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Footer */
+.footer {
+  text-align: center;
+  font-size: 0.9rem;
+  margin-top: 40px;
+  color: #8ab4f8;
+}
+
+/* Badges */
+.badge {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-weight: bold;
+  font-size: 0.85rem;
+  min-width: 50px;
+  color: white;
+}
+
+.badge.red {
+  background-color: #ff3e3e;
+}
+
+.badge.orange {
+  background-color: #ffa726;
+}
+
+.badge.green {
+  background-color: #00c48c;
+}
+
+/* Dark Mode Enhancements */
+.dark-mode .forecast-section,
+.dark-mode .chart-section {
+  background-color: #131e33;
+}
+
+.dark-mode input[type="text"],
+.dark-mode input[type="file"] {
+  background-color: #2a2d38;
+  border: 1px solid #888;
+  color: white;
+}

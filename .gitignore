@@ -1,0 +1,24 @@
+# Node
+node_modules/
+npm-debug.log
+yarn-debug.log
+yarn-error.log
+
+# Python
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.pkl
+
+# Environment
+.env
+
+# Build
+dist/
+build/
+
+# System
+.DS_Store
+.vscode/

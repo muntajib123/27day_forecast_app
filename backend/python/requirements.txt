@@ -1,0 +1,4 @@
+pymongo
+numpy
+pandas
+scikit-learn

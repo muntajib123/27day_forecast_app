@@ -1,0 +1,37 @@
+[
+  {
+    "day": 1,
+    "date": "2025-06-27",
+    "radio_flux_pred": 113.76,
+    "a_index_pred": 20.36,
+    "kp_index_pred": 4.98
+  },
+  {
+    "day": 2,
+    "date": "2025-06-28",
+    "radio_flux_pred": 111.46,
+    "a_index_pred": 13.65,
+    "kp_index_pred": 3.86
+  },
+  {
+    "day": 3,
+    "date": "2025-06-29",
+    "radio_flux_pred": 111.04,
+    "a_index_pred": 10.34,
+    "kp_index_pred": 3.35
+  },
+  {
+    "day": 4,
+    "date": "2025-06-30",
+    "radio_flux_pred": 112.44,
+    "a_index_pred": 9.12,
+    "kp_index_pred": 3.00
+  },
+  {
+    "day": 5,
+    "date": "2025-07-01",
+    "radio_flux_pred": 114.23,
+    "a_index_pred": 8.91,
+    "kp_index_pred": 2.75
+  }
+]
