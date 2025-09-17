@@ -1,4 +1,4 @@
-// backend/server.js (with shifted forecast responses)
+// backend/server.js (final fixed: LSTM future-only, NOAA shifted)
 const express = require("express");
 const cors = require("cors");
 const cron = require("node-cron");
@@ -27,8 +27,10 @@ const pythonExe =
     ? path.join(__dirname, "venv", "Scripts", "python.exe")
     : "python3");
 
-const USE_NODE_CRON = (process.env.USE_NODE_CRON || "true").toLowerCase() === "true";
-const SKIP_STARTUP_RUN = (process.env.SKIP_STARTUP_RUN || "false").toLowerCase() === "true";
+const USE_NODE_CRON =
+  (process.env.USE_NODE_CRON || "true").toLowerCase() === "true";
+const SKIP_STARTUP_RUN =
+  (process.env.SKIP_STARTUP_RUN || "false").toLowerCase() === "true";
 
 // ===== Connect MongoDB =====
 mongoose
@@ -108,17 +110,21 @@ async function savePredictions(predictions) {
       return;
     }
 
-    const lastNoaaDay = new Date(Date.UTC(
-      lastNOAADate.getUTCFullYear(),
-      lastNOAADate.getUTCMonth(),
-      lastNOAADate.getUTCDate()
-    ));
+    const lastNoaaDay = new Date(
+      Date.UTC(
+        lastNOAADate.getUTCFullYear(),
+        lastNOAADate.getUTCMonth(),
+        lastNOAADate.getUTCDate()
+      )
+    );
 
     // filter strictly > lastNOAADate
     const futurePredictions = Array.isArray(predictions)
       ? predictions.filter((p) => {
           const pd = new Date(p.date);
-          const pdDay = new Date(Date.UTC(pd.getUTCFullYear(), pd.getUTCMonth(), pd.getUTCDate()));
+          const pdDay = new Date(
+            Date.UTC(pd.getUTCFullYear(), pd.getUTCMonth(), pd.getUTCDate())
+          );
           return pdDay.getTime() > lastNoaaDay.getTime();
         })
       : [];
@@ -133,12 +139,18 @@ async function savePredictions(predictions) {
     // cleanup: remove overlapping docs
     const deleteRes = await coll.deleteMany({ date: { $lte: lastNoaaDay } });
     if (deleteRes.deletedCount > 0) {
-      console.log(`🧹 Removed ${deleteRes.deletedCount} overlapping LSTM docs up to ${lastNoaaDay.toISOString().slice(0,10)}`);
+      console.log(
+        `🧹 Removed ${deleteRes.deletedCount} overlapping LSTM docs up to ${lastNoaaDay
+          .toISOString()
+          .slice(0, 10)}`
+      );
     }
 
     const bulkOps = futurePredictions.map((p) => {
       const dt = new Date(p.date);
-      const dtUTC = new Date(Date.UTC(dt.getUTCFullYear(), dt.getUTCMonth(), dt.getUTCDate()));
+      const dtUTC = new Date(
+        Date.UTC(dt.getUTCFullYear(), dt.getUTCMonth(), dt.getUTCDate())
+      );
       return {
         updateOne: {
           filter: { date: dtUTC },
@@ -152,16 +164,20 @@ async function savePredictions(predictions) {
               radio_flux: p.f107,
               ap_index: p.a_index,
               kp_index: p.kp_max,
-              source: "lstm"
-            }
+              source: "lstm",
+            },
           },
-          upsert: true
-        }
+          upsert: true,
+        },
       };
     });
 
     const result = await coll.bulkWrite(bulkOps, { ordered: false });
-    console.log(`✅ Upserted ${result.upsertedCount + result.modifiedCount} predictions (after ${lastNoaaDay.toISOString().slice(0,10)}).`);
+    console.log(
+      `✅ Upserted ${
+        result.upsertedCount + result.modifiedCount
+      } predictions (after ${lastNoaaDay.toISOString().slice(0, 10)}).`
+    );
   } catch (e) {
     console.error("❌ Error saving predictions:", e.message || e);
   }
@@ -236,7 +252,7 @@ function mapDoc(d) {
     radio_flux: d.radio_flux ?? d.f107,
     ap_index: d.ap_index ?? d.a_index,
     kp_index: d.kp_index ?? d.kp_max,
-    source: d.source || "unknown"
+    source: d.source || "unknown",
   };
 }
 
@@ -248,36 +264,54 @@ function shiftToTomorrow(docs) {
 
   const firstDate = new Date(docs[0].date);
   const now = new Date();
-  const todayUtc = new Date(Date.UTC(
-    now.getUTCFullYear(),
-    now.getUTCMonth(),
-    now.getUTCDate(), 0,0,0,0
-  ));
+  const todayUtc = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0)
+  );
   const desiredStart = new Date(todayUtc.getTime() + msPerDay);
 
   const shiftDays = Math.round((desiredStart - firstDate) / msPerDay);
 
-  return docs.slice(0, 27).map(d => {
+  return docs.slice(0, 27).map((d) => {
     const shifted = { ...mapDoc(d) };
     const origDate = new Date(d.date);
-    shifted.date = new Date(origDate.getTime() + shiftDays * msPerDay).toISOString();
+    shifted.date = new Date(
+      origDate.getTime() + shiftDays * msPerDay
+    ).toISOString();
     return shifted;
   });
 }
 
-// Shifted LSTM forecasts
+// ===== Forecast APIs =====
+
+// LSTM forecasts (future only, after last NOAA date)
 app.get("/api/predictions/lstm", async (_req, res) => {
   try {
-    const coll = mongoose.connection.db.collection("forecast_lstm_27day");
-    const docs = await coll.find({}).sort({ date: 1 }).toArray();
-    if (!docs.length) return res.status(404).json({ error: "No forecast data found" });
-    res.json(shiftToTomorrow(docs));
+    const noaaCol = mongoose.connection.db.collection("forecast_27day");
+    const lstmCol = mongoose.connection.db.collection("forecast_lstm_27day");
+
+    const lastNoaa = await noaaCol.find({}).sort({ date: -1 }).limit(1).toArray();
+    if (!lastNoaa.length) {
+      return res.status(404).json({ error: "No NOAA data found" });
+    }
+    const lastNoaaDate = new Date(lastNoaa[0].date);
+
+    const docs = await lstmCol
+      .find({ date: { $gt: lastNoaaDate } })
+      .sort({ date: 1 })
+      .toArray();
+
+    if (!docs.length) {
+      return res.status(404).json({ error: "No future LSTM forecast data found" });
+    }
+
+    res.json(docs.map(mapDoc));
   } catch (e) {
+    console.error("Error /api/predictions/lstm:", e);
     res.status(500).json({ error: e.message || "Server error" });
   }
 });
 
-// Shifted 27-day NOAA forecasts
+// NOAA shifted forecasts (start tomorrow)
 app.get("/api/predictions/27day", async (_req, res) => {
   try {
     const col = mongoose.connection.db.collection("forecast_27day");
@@ -290,14 +324,16 @@ app.get("/api/predictions/27day", async (_req, res) => {
   }
 });
 
-// Combined forecasts (no shifting applied here)
+// Combined forecasts (no shifting here)
 app.get("/api/predictions/combined", async (_req, res) => {
   try {
     const noaaCol = mongoose.connection.db.collection("forecast_27day");
     const lstmCol = mongoose.connection.db.collection("forecast_lstm_27day");
     const noaaDocs = await noaaCol.find({}).sort({ date: 1 }).toArray();
     const lstmDocs = await lstmCol.find({}).sort({ date: 1 }).toArray();
-    const all = [...noaaDocs, ...lstmDocs].sort((a, b) => new Date(a.date) - new Date(b.date));
+    const all = [...noaaDocs, ...lstmDocs].sort(
+      (a, b) => new Date(a.date) - new Date(b.date)
+    );
     res.json(all.map(mapDoc));
   } catch (e) {
     res.status(500).json({ error: e.message || "Failed to fetch combined forecast" });
