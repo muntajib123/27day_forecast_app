@@ -2,41 +2,45 @@
 body {
   margin: 0;
   font-family: 'Segoe UI', 'Roboto', sans-serif;
-  background-color: #0a0f2c;
-  color: #ffffff;
+  background-color: #ffffff; /* plain white background */
+  color: #000000; /* dark text for readability */
 }
 
 /* Space-themed paper (table) styling */
 .MuiPaper-root {
-  background-color: #102027 !important;
+  background-color: #f9f9f9 !important; /* light grey for contrast */
   border-radius: 16px !important;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
 }
 
 /* Card hover effect */
 .MuiCard-root {
   transition: transform 0.3s ease, box-shadow 0.3s ease;
+  background-color: #ffffff !important;
 }
 
 .MuiCard-root:hover {
   transform: translateY(-4px);
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
 }
 
 /* Table enhancements */
 .MuiTableCell-head {
   font-weight: bold !important;
   font-size: 1rem;
-  background-color: #1c2a38;
+  background-color: #eeeeee;
+  color: #000000;
 }
 
 .MuiTableCell-body {
   font-size: 0.95rem;
+  color: #000000;
 }
 
 /* Cards text spacing */
 .MuiCardContent-root {
   padding-bottom: 16px !important;
+  color: #000000;
 }
 
 /* Responsive tweak for smaller screens */

@@ -2,16 +2,44 @@
 import React, { useEffect, useState } from "react";
 import { format } from "date-fns";
 import ClipLoader from "react-spinners/ClipLoader";
-import { Box, Typography, Card, CardContent, Grid } from "@mui/material";
+import {
+  Box,
+  Typography,
+  Card,
+  CardContent,
+  Grid,
+} from "@mui/material";
 import WbSunnyIcon from "@mui/icons-material/WbSunny";
 import BoltIcon from "@mui/icons-material/Bolt";
 import SignalCellularAltIcon from "@mui/icons-material/SignalCellularAlt";
-import { fetchJSON } from "../utils/api"; // use helper
+import { fetchJSON } from "../utils/api"; // ✅ use fetch helper
 
+// Utility to format date
 const formatDateUTC = (rawDate) => {
   const date = new Date(rawDate);
   return format(date, "MMM dd, yyyy");
 };
+
+// local fallback function (tries LSTM, then combined, then 27day)
+async function loadForecastWithFallback() {
+  const order = [
+    "/api/predictions/lstm",
+    "/api/predictions/combined",
+    "/api/predictions/27day",
+  ];
+  for (const p of order) {
+    try {
+      const res = await fetchJSON(p);
+      if (Array.isArray(res) && res.length > 0) {
+        console.log("LSTM table using", p);
+        return res;
+      }
+    } catch (err) {
+      console.warn("Endpoint failed:", p, err && err.message ? err.message : err);
+    }
+  }
+  return [];
+}
 
 const LSTMForecastTable = ({ onDataLoaded }) => {
   const [data, setData] = useState([]);
@@ -21,7 +49,7 @@ const LSTMForecastTable = ({ onDataLoaded }) => {
     let mounted = true;
     (async () => {
       try {
-        const forecast = await fetchJSON("/api/predictions/lstm"); // ORIGINAL LSTM endpoint
+        const forecast = await loadForecastWithFallback();
         if (!mounted) return;
         setData(forecast);
         if (onDataLoaded) onDataLoaded(forecast);
@@ -39,20 +67,42 @@ const LSTMForecastTable = ({ onDataLoaded }) => {
     return (
       <Box sx={{ textAlign: "center", py: 5 }}>
         <ClipLoader size={35} color="#1976d2" />
-        <Typography variant="body2" sx={{ mt: 1, color: "#777" }}>Loading forecast data...</Typography>
+        <Typography variant="body2" sx={{ mt: 1, color: "#777" }}>
+          Loading forecast data...
+        </Typography>
       </Box>
     );
   }
 
   if (!data || data.length === 0) {
-    return <Typography variant="h6" align="center" sx={{ mt: 4, color: "#777" }}>No LSTM forecast data available.</Typography>;
+    return (
+      <Typography variant="h6" align="center" sx={{ mt: 4, color: "#777" }}>
+        No LSTM forecast data available.
+      </Typography>
+    );
   }
 
-  const filtered = [...data].filter((item) => item.date).sort((a, b) => new Date(a.date) - new Date(b.date)).slice(0, 27);
+  const filtered = [...data]
+    .filter((item) => item.date)
+    .sort((a, b) => new Date(a.date) - new Date(b.date))
+    .slice(0, 27);
 
   return (
-    <Box sx={{ mt: 5, px: 2, py: 4, backgroundColor: "#ffffff", borderRadius: 2 }}>
-      <Typography variant="h5" align="center" gutterBottom sx={{ color: "#0a0f2c", fontWeight: "bold", mb: 4 }}>
+    <Box
+      sx={{
+        mt: 5,
+        px: 2,
+        py: 4,
+        backgroundColor: "#ffffff",
+        borderRadius: 2,
+      }}
+    >
+      <Typography
+        variant="h5"
+        align="center"
+        gutterBottom
+        sx={{ color: "#0a0f2c", fontWeight: "bold", mb: 4 }}
+      >
         27-Day Space Weather Forecast (LSTM Model)
       </Typography>
 
@@ -64,21 +114,42 @@ const LSTMForecastTable = ({ onDataLoaded }) => {
 
           return (
             <Grid item xs={12} sm={6} md={4} key={idx}>
-              <Card sx={{ backgroundColor: "#f9f9f9", color: "#000", borderRadius: 3, boxShadow: "0 0 10px rgba(0,0,0,0.1)" }}>
+              <Card
+                sx={{
+                  backgroundColor: "#f9f9f9",
+                  color: "#000",
+                  borderRadius: 3,
+                  boxShadow: "0 0 10px rgba(0,0,0,0.1)",
+                }}
+              >
                 <CardContent>
                   <Typography variant="h6" gutterBottom>
-                    <WbSunnyIcon sx={{ mr: 1, color: "gold" }} />{formatDateUTC(item.date)}
+                    <WbSunnyIcon sx={{ mr: 1, color: "gold" }} />
+                    {formatDateUTC(item.date)}
                   </Typography>
+
                   <Typography variant="body2" gutterBottom>
                     <SignalCellularAltIcon sx={{ mr: 1, color: "#00e5ff" }} />
                     <strong>Radio Flux:</strong> {flux}
                   </Typography>
+
                   <Typography variant="body2" gutterBottom>
-                    <WbSunnyIcon sx={{ mr: 1, color: apIndex >= 20 ? "orange" : "#64dd17" }} />
+                    <WbSunnyIcon
+                      sx={{
+                        mr: 1,
+                        color: apIndex >= 20 ? "orange" : "#64dd17",
+                      }}
+                    />
                     <strong>Ap Index:</strong> {apIndex}
                   </Typography>
+
                   <Typography variant="body2">
-                    <BoltIcon sx={{ mr: 1, color: kpIndex >= 5 ? "red" : "#ff6f00" }} />
+                    <BoltIcon
+                      sx={{
+                        mr: 1,
+                        color: kpIndex >= 5 ? "red" : "#ff6f00",
+                      }}
+                    />
                     <strong>Kp Index:</strong> {kpIndex}
                   </Typography>
                 </CardContent>
