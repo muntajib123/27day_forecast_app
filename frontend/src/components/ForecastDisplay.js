@@ -1,6 +1,4 @@
-// src/components/ForecastDisplay.js
-
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Box,
   Card,
@@ -16,6 +14,7 @@ import {
   Paper
 } from '@mui/material';
 import './ForecastDisplay.css';
+import { fetchJSON } from '../utils/api';  // ✅ use helper
 
 // Color coding based on Kp index severity
 const getKpColor = (kpIndex) => {
@@ -25,7 +24,31 @@ const getKpColor = (kpIndex) => {
   return '#43a047'; // green
 };
 
-const ForecastDisplay = ({ forecast }) => {
+const ForecastDisplay = () => {
+  const [forecast, setForecast] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const data = await fetchJSON('/api/predictions/27day');
+        setForecast(data);
+      } catch (err) {
+        console.error("Error fetching forecast:", err);
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, []);
+
+  if (loading) {
+    return (
+      <Typography variant="h6" align="center" sx={{ mt: 4, color: '#ccc' }}>
+        Loading forecast data...
+      </Typography>
+    );
+  }
+
   if (!forecast?.length) {
     return (
       <Typography variant="h6" align="center" sx={{ mt: 4, color: '#ccc' }}>
@@ -39,16 +62,16 @@ const ForecastDisplay = ({ forecast }) => {
       sx={{
         px: 2,
         py: 4,
-        background: 'linear-gradient(to bottom, #0f2027, #203a43, #2c5364)',
+        backgroundColor: '#ffffff', // ✅ plain white background
         minHeight: '100vh',
-        color: 'white'
+        color: 'black'
       }}
     >
       <Typography
         variant="h4"
         align="center"
         gutterBottom
-        sx={{ mb: 4, fontWeight: 'bold', color: '#bbdefb' }}
+        sx={{ mb: 4, fontWeight: 'bold', color: '#0a0f2c' }}
       >
         27-Day Space Weather Forecast
       </Typography>
@@ -59,15 +82,15 @@ const ForecastDisplay = ({ forecast }) => {
           <Grid item xs={12} sm={6} md={3} key={index}>
             <Card
               sx={{
-                backgroundColor: '#1a237e',
-                color: 'white',
+                backgroundColor: '#f5f5f5',
+                color: 'black',
                 borderRadius: 3,
                 boxShadow: 5,
                 height: '100%',
                 transition: 'transform 0.3s',
                 '&:hover': {
                   transform: 'scale(1.05)',
-                  backgroundColor: '#283593'
+                  backgroundColor: '#e0e0e0'
                 }
               }}
             >
@@ -88,18 +111,18 @@ const ForecastDisplay = ({ forecast }) => {
       </Grid>
 
       {/* Table Section */}
-      <TableContainer component={Paper} sx={{ backgroundColor: '#102027' }}>
+      <TableContainer component={Paper} sx={{ backgroundColor: '#fafafa' }}>
         <Table>
           <TableHead>
             <TableRow>
-              <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Date</TableCell>
-              <TableCell sx={{ color: 'white', fontWeight: 'bold' }}>Kp Index</TableCell>
+              <TableCell sx={{ fontWeight: 'bold' }}>Date</TableCell>
+              <TableCell sx={{ fontWeight: 'bold' }}>Kp Index</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {forecast.map((day, index) => (
               <TableRow key={index}>
-                <TableCell sx={{ color: 'white' }}>
+                <TableCell>
                   {new Date(day.date).toDateString()}
                 </TableCell>
                 <TableCell

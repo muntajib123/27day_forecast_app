@@ -1,2 +1,4 @@
 // src/config.js
-export const API_URL = (process.env.REACT_APP_API_URL || "http://localhost:5000").replace(/\/$/, "");
+
+// Hardcoded backend API URL (Render)
+export const API_URL = "https://two7day-forecast-app.onrender.com";
