@@ -16,19 +16,23 @@ import ForecastCharts from "./components/ForecastCharts";
 import ForecastBarCharts from "./components/ForecastBarCharts";
 import DateRangeFilter from "./components/DateRangeFilter";
 
+import { fetchJSON } from "./utils/api"; // ✅ use helper
+
 function App() {
   const [forecastData, setForecastData] = useState([]);
   const [startDate, setStartDate] = useState(null);
   const [endDate, setEndDate] = useState(null);
 
+  // Load data from backend
   useEffect(() => {
-    fetch("/api/predictions/lstm")
-      .then((res) => {
-        if (!res.ok) throw new Error("Network response was not ok");
-        return res.json();
-      })
-      .then(setForecastData)
-      .catch((err) => console.error("Fetch error:", err));
+    (async () => {
+      try {
+        const data = await fetchJSON("/api/predictions/lstm");
+        setForecastData(Array.isArray(data) ? data : []);
+      } catch (err) {
+        console.error("Fetch error:", err);
+      }
+    })();
   }, []);
 
   // Light theme with larger font sizes
@@ -48,7 +52,7 @@ function App() {
     },
     typography: {
       fontFamily: "Orbitron, Roboto, sans-serif",
-      h3: { fontSize: "3rem" }, // bigger main heading
+      h3: { fontSize: "3rem" },
       subtitle1: { fontSize: "1.5rem" },
       body1: { fontSize: "1.2rem" },
       button: { fontSize: "1.1rem" },
@@ -100,15 +104,10 @@ function App() {
           }}
         >
           {/* Header with CoralComp Logo */}
-          <Box
-            display="flex"
-            alignItems="center"
-            justifyContent="center"
-            mb={4}
-          >
+          <Box display="flex" alignItems="center" justifyContent="center" mb={4}>
             <Box
               component="img"
-              src="/coralcomp-logo.png" // Place your logo inside public/
+              src="/coralcomp-logo.png"
               alt="CoralComp Logo"
               sx={{ height: 60, mr: 2 }}
             />
@@ -136,7 +135,7 @@ function App() {
           <LSTMForecastTable
             data={filteredData}
             onDataLoaded={handleDataLoaded}
-            lightMode={true} // optional prop if your table supports theme
+            lightMode={true}
           />
 
           {/* Charts */}
