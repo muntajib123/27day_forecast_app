@@ -1,3 +1,4 @@
+// src/components/LSTMForecastTable.js
 import React, { useEffect, useState } from "react";
 import { format } from "date-fns";
 import ClipLoader from "react-spinners/ClipLoader";
@@ -26,7 +27,8 @@ const LSTMForecastTable = ({ onDataLoaded }) => {
   useEffect(() => {
     (async () => {
       try {
-        const forecast = await fetchJSON("/api/predictions/lstm");
+        // <- switched to /27day because backend returns data there
+        const forecast = await fetchJSON("/api/predictions/27day");
         setData(forecast);
         if (onDataLoaded) onDataLoaded(forecast);
       } catch (err) {

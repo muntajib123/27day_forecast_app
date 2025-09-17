@@ -23,11 +23,11 @@ function App() {
   const [startDate, setStartDate] = useState(null);
   const [endDate, setEndDate] = useState(null);
 
-  // Load data from backend
+  // Load data from backend (use /27day because backend has data)
   useEffect(() => {
     (async () => {
       try {
-        const data = await fetchJSON("/api/predictions/lstm");
+        const data = await fetchJSON("/api/predictions/27day");
         setForecastData(Array.isArray(data) ? data : []);
       } catch (err) {
         console.error("Fetch error:", err);
