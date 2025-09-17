@@ -1,4 +1,4 @@
-// server.js (with normalized fields in API responses)
+// server.js (with shifted forecast responses)
 const express = require("express");
 const cors = require("cors");
 const cron = require("node-cron");
@@ -240,27 +240,57 @@ function mapDoc(d) {
   };
 }
 
+// helper: shift docs so forecast starts from tomorrow (UTC)
+function shiftToTomorrow(docs) {
+  if (!docs.length) return [];
+
+  const msPerDay = 24 * 60 * 60 * 1000;
+
+  const firstDate = new Date(docs[0].date);
+  const now = new Date();
+  const todayUtc = new Date(Date.UTC(
+    now.getUTCFullYear(),
+    now.getUTCMonth(),
+    now.getUTCDate(), 0,0,0,0
+  ));
+  const desiredStart = new Date(todayUtc.getTime() + msPerDay);
+
+  const shiftDays = Math.round((desiredStart - firstDate) / msPerDay);
+
+  return docs.slice(0, 27).map(d => {
+    const shifted = { ...mapDoc(d) };
+    const origDate = new Date(d.date);
+    shifted.date = new Date(origDate.getTime() + shiftDays * msPerDay).toISOString();
+    return shifted;
+  });
+}
+
+// Shifted LSTM forecasts
 app.get("/api/predictions/lstm", async (_req, res) => {
   try {
     const coll = mongoose.connection.db.collection("forecast_lstm_27day");
     const docs = await coll.find({}).sort({ date: 1 }).toArray();
-    res.json(docs.map(mapDoc));
+    if (!docs.length) return res.status(404).json({ error: "No forecast data found" });
+    res.json(shiftToTomorrow(docs));
   } catch (e) {
     res.status(500).json({ error: e.message || "Server error" });
   }
 });
 
+// Shifted 27-day NOAA forecasts
 app.get("/api/predictions/27day", async (_req, res) => {
   try {
     const col = mongoose.connection.db.collection("forecast_27day");
     const docs = await col.find({}).sort({ date: 1 }).toArray();
-    res.json(docs.map(mapDoc));
+    if (!docs.length) return res.status(404).json({ error: "No forecast data found" });
+    res.json(shiftToTomorrow(docs));
   } catch (e) {
     console.error("Error /api/predictions/27day:", e);
     res.status(500).json({ error: "Failed to fetch 27-day forecast" });
   }
 });
 
+// Combined forecasts (no shifting applied here)
 app.get("/api/predictions/combined", async (_req, res) => {
   try {
     const noaaCol = mongoose.connection.db.collection("forecast_27day");
