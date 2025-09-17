@@ -20,23 +20,47 @@ const formatDateUTC = (rawDate) => {
   return format(date, "MMM dd, yyyy");
 };
 
+// local fallback function (tries LSTM, then combined, then 27day)
+async function loadForecastWithFallback() {
+  const order = [
+    "/api/predictions/lstm",
+    "/api/predictions/combined",
+    "/api/predictions/27day",
+  ];
+  for (const p of order) {
+    try {
+      const res = await fetchJSON(p);
+      if (Array.isArray(res) && res.length > 0) {
+        console.log("LSTM table using", p);
+        return res;
+      }
+    } catch (err) {
+      console.warn("Endpoint failed:", p, err && err.message ? err.message : err);
+    }
+  }
+  return [];
+}
+
 const LSTMForecastTable = ({ onDataLoaded }) => {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let mounted = true;
     (async () => {
       try {
-        // <- switched to /27day because backend returns data there
-        const forecast = await fetchJSON("/api/predictions/27day");
+        const forecast = await loadForecastWithFallback();
+        if (!mounted) return;
         setData(forecast);
         if (onDataLoaded) onDataLoaded(forecast);
       } catch (err) {
         console.error("Error fetching LSTM forecast:", err);
+        if (mounted) setData([]);
       } finally {
-        setLoading(false);
+        if (mounted) setLoading(false);
       }
     })();
+    return () => { mounted = false; };
   }, [onDataLoaded]);
 
   if (loading) {

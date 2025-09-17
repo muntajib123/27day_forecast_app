@@ -16,21 +16,44 @@ import ForecastCharts from "./components/ForecastCharts";
 import ForecastBarCharts from "./components/ForecastBarCharts";
 import DateRangeFilter from "./components/DateRangeFilter";
 
-import { fetchJSON } from "./utils/api"; // ✅ use helper
+import { fetchJSON } from "./utils/api"; // helper that prepends API_URL + validates JSON
+
+// Helper: try endpoints in order and return first non-empty array
+async function fetchWithFallbackOrder(order = [
+  "/api/predictions/lstm",
+  "/api/predictions/combined",
+  "/api/predictions/27day"
+]) {
+  for (const path of order) {
+    try {
+      const res = await fetchJSON(path);
+      if (Array.isArray(res) && res.length > 0) {
+        console.log("Using endpoint:", path);
+        return res;
+      }
+    } catch (err) {
+      console.warn("Endpoint failed:", path, err && err.message ? err.message : err);
+      // try next
+    }
+  }
+  // all failed or empty, return empty array
+  return [];
+}
 
 function App() {
   const [forecastData, setForecastData] = useState([]);
   const [startDate, setStartDate] = useState(null);
   const [endDate, setEndDate] = useState(null);
 
-  // Load data from backend (use /27day because backend has data)
+  // Load data from backend with fallback
   useEffect(() => {
     (async () => {
       try {
-        const data = await fetchJSON("/api/predictions/27day");
+        const data = await fetchWithFallbackOrder();
         setForecastData(Array.isArray(data) ? data : []);
       } catch (err) {
         console.error("Fetch error:", err);
+        setForecastData([]);
       }
     })();
   }, []);
