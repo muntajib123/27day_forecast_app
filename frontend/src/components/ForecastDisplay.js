@@ -1,3 +1,5 @@
+// src/components/ForecastDisplay.js
+
 import React, { useEffect, useState } from 'react';
 import {
   Box,
@@ -24,21 +26,47 @@ const getKpColor = (kpIndex) => {
   return '#43a047'; // green
 };
 
+// try endpoints LSTM -> combined -> 27day and return first non-empty array
+async function loadForecastWithFallback() {
+  const order = [
+    '/api/predictions/lstm',
+    '/api/predictions/combined',
+    '/api/predictions/27day'
+  ];
+
+  for (const path of order) {
+    try {
+      const res = await fetchJSON(path);
+      if (Array.isArray(res) && res.length > 0) {
+        console.log('ForecastDisplay using', path);
+        return res;
+      }
+    } catch (err) {
+      console.warn('Forecast endpoint failed:', path, err && err.message ? err.message : err);
+    }
+  }
+  return [];
+}
+
 const ForecastDisplay = () => {
   const [forecast, setForecast] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let mounted = true;
     (async () => {
       try {
-        const data = await fetchJSON('/api/predictions/27day');
-        setForecast(data);
+        const data = await loadForecastWithFallback();
+        if (!mounted) return;
+        setForecast(Array.isArray(data) ? data : []);
       } catch (err) {
-        console.error("Error fetching forecast:", err);
+        console.error('Error fetching forecast:', err);
+        if (mounted) setForecast([]);
       } finally {
-        setLoading(false);
+        if (mounted) setLoading(false);
       }
     })();
+    return () => { mounted = false; };
   }, []);
 
   if (loading) {
@@ -62,7 +90,7 @@ const ForecastDisplay = () => {
       sx={{
         px: 2,
         py: 4,
-        backgroundColor: '#ffffff', // ✅ plain white background
+        backgroundColor: '#ffffff',
         minHeight: '100vh',
         color: 'black'
       }}
