@@ -1,4 +1,4 @@
-// server.js (with shifted forecast responses)
+// backend/server.js (with shifted forecast responses)
 const express = require("express");
 const cors = require("cors");
 const cron = require("node-cron");
