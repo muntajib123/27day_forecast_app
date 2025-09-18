@@ -18,19 +18,30 @@ import DateRangeFilter from "./components/DateRangeFilter";
 
 import { fetchJSON } from "./utils/api";
 
-// ✅ Always fetch future-only forecasts (LSTM)
+// ===== Fallback fetch: try LSTM, then combined, then NOAA 27day =====
 async function fetchForecastData() {
-  try {
-    const res = await fetchJSON("/api/predictions/lstm");
-    if (Array.isArray(res) && res.length > 0) {
-      console.log("✅ Using endpoint: /api/predictions/lstm");
-      return res;
-    } else {
-      console.warn("⚠️ LSTM endpoint returned empty array");
+  const endpoints = [
+    "/api/predictions/lstm",
+    "/api/predictions/combined",
+    "/api/predictions/27day",
+  ];
+
+  for (const ep of endpoints) {
+    try {
+      const res = await fetchJSON(ep);
+      if (Array.isArray(res) && res.length > 0) {
+        console.log(`✅ Using endpoint: ${ep}`);
+        return res;
+      } else {
+        console.warn(`⚠️ Endpoint returned empty array: ${ep}`);
+      }
+    } catch (err) {
+      // log and try next endpoint
+      console.warn(`⚠️ Endpoint failed: ${ep}`, err && (err.message || err));
     }
-  } catch (err) {
-    console.error("❌ Endpoint failed: /api/predictions/lstm", err.message || err);
   }
+
+  // nothing worked
   return [];
 }
 
@@ -39,12 +50,12 @@ function App() {
   const [startDate, setStartDate] = useState(null);
   const [endDate, setEndDate] = useState(null);
 
-  // Load data from backend
+  // Load data from backend (uses fallback logic above)
   useEffect(() => {
     (async () => {
       try {
         const data = await fetchForecastData();
-        if (!data.length) {
+        if (!data || !data.length) {
           console.warn("⚠️ No forecasts returned from backend.");
         }
         setForecastData(Array.isArray(data) ? data : []);
@@ -72,12 +83,12 @@ function App() {
     console.log("📡 Forecast data loaded:", data);
   }, []);
 
-  // ✅ Ensure sorted data
+  // Ensure sorted data
   const sortedByDate = [...forecastData].sort(
     (a, b) => new Date(a.date) - new Date(b.date)
   );
 
-  // ✅ Improved filtering (normalize start/end of day)
+  // Improved filtering (normalize start/end of day)
   const filteredData = sortedByDate.filter((item) => {
     const itemDate = new Date(item.date);
 
@@ -104,7 +115,13 @@ function App() {
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <Box sx={{ backgroundColor: theme.palette.background.default, minHeight: "100vh", py: 6 }}>
+      <Box
+        sx={{
+          backgroundColor: theme.palette.background.default,
+          minHeight: "100vh",
+          py: 6,
+        }}
+      >
         <Container
           maxWidth="lg"
           sx={{
@@ -115,7 +132,7 @@ function App() {
             px: { xs: 2, md: 4 },
           }}
         >
-          {/* ✅ Fixed Header */}
+          {/* Fixed Header */}
           <Box display="flex" alignItems="center" justifyContent="center" mb={4}>
             <Box
               component="img"
