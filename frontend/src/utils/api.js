@@ -1,27 +1,43 @@
 // src/utils/api.js
-import { API_URL } from "../config";
 
-export async function fetchJSON(path) {
-  const fullUrl = path.startsWith("/")
-    ? `${API_URL}${path}`
-    : `${API_URL}/${path}`;
+// Base URL for backend API
+// On Vercel, set REACT_APP_API_BASE in project settings -> Environment Variables
+// Example: https://two7day-forecast-app.onrender.com
+const API_BASE = process.env.REACT_APP_API_BASE || "";
 
-  const res = await fetch(fullUrl, {
-    headers: { Accept: "application/json" },
-  });
+/**
+ * fetchJSON
+ * A helper to fetch JSON with proper error handling.
+ *
+ * @param {string} path - API path (e.g. "/api/predictions/lstm") or full URL
+ * @param {object} opts - fetch options
+ * @returns {Promise<any>} Parsed JSON response
+ */
+export async function fetchJSON(path, opts = {}) {
+  // If path already has "http", don't prepend API_BASE
+  const url = path.startsWith("http") ? path : `${API_BASE}${path}`;
 
-  const text = await res.text();
+  const res = await fetch(url, opts);
 
   if (!res.ok) {
-    console.error("API error", res.status, fullUrl, text);
-    throw new Error(`API error ${res.status}: ${text}`);
+    // Try to parse error body if possible
+    let body = null;
+    try {
+      body = await res.json();
+    } catch (e) {
+      try {
+        body = await res.text();
+      } catch {
+        body = null;
+      }
+    }
+
+    const msg = body && body.error ? body.error : `HTTP ${res.status}`;
+    const err = new Error(msg);
+    err.status = res.status;
+    err.body = body;
+    throw err;
   }
 
-  const ct = res.headers.get("content-type") || "";
-  if (!ct.includes("application/json")) {
-    console.error("Expected JSON but got", ct, "from", fullUrl, "response:", text);
-    throw new Error(`Expected JSON but got ${ct}`);
-  }
-
-  return JSON.parse(text);
+  return res.json();
 }

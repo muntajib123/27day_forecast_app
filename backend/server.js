@@ -1,4 +1,4 @@
-// backend/server.js (final fixed: LSTM future-only, NOAA shifted)
+// backend/server.js (fixed: robust JSON extraction from Python stdout)
 const express = require("express");
 const cors = require("cors");
 const cron = require("node-cron");
@@ -86,14 +86,68 @@ async function runLSTM() {
             new Error(`Python execution failed: ${err.message}\n${stderr || ""}`)
           );
         }
-        const match = stdout.match(/(\[|\{)[\s\S]*(\]|\})/);
-        const jsonText = match ? match[0] : stdout.trim();
+
+        // === robust extraction of JSON from python stdout ===
+        let jsonText = null;
+        const candidates = [];
+
+        // collect candidate JSON blocks by looking for [ ... ] and { ... } spans
+        for (const openChar of ["[", "{"]) {
+          let idx = stdout.indexOf(openChar);
+          while (idx !== -1) {
+            const closeIdx = stdout.lastIndexOf(openChar === "[" ? "]" : "}");
+            if (closeIdx > idx) {
+              const cand = stdout.slice(idx, closeIdx + 1).trim();
+              candidates.push(cand);
+            }
+            idx = stdout.indexOf(openChar, idx + 1);
+          }
+        }
+
+        // also prefer JSON that starts on a new line (common when print() outputs JSON on its own line)
+        const nlIdx = stdout.lastIndexOf("\n[");
+        if (nlIdx !== -1) candidates.push(stdout.slice(nlIdx + 1).trim());
+        const nlIdx2 = stdout.lastIndexOf("\n{");
+        if (nlIdx2 !== -1) candidates.push(stdout.slice(nlIdx2 + 1).trim());
+
+        // pick the first candidate that parses and looks like the expected shape (contains "date" field)
+        for (const c of candidates) {
+          if (!c) continue;
+          try {
+            const parsed = JSON.parse(c);
+            const ok =
+              (Array.isArray(parsed) && parsed.length && parsed[0] && parsed[0].date) ||
+              (parsed && (parsed.forecasts || parsed.date));
+            if (ok) {
+              jsonText = c;
+              break;
+            }
+          } catch (err) {
+            // ignore parse errors for this candidate
+          }
+        }
+
+        // fallback to the simple regex (last resort)
+        if (!jsonText) {
+          const match = stdout.match(/(\[|\{)[\s\S]*(\]|\})/);
+          jsonText = match ? match[0] : stdout.trim();
+        }
+
+        if (!jsonText) {
+          console.error(
+            "❌ Could not find JSON in Python stdout. Raw stdout (first 800 chars):\n",
+            stdout.slice(0, 800)
+          );
+          return reject(new Error("No JSON found in python stdout"));
+        }
+        // === end extraction ===
 
         try {
           const predictions = jsonText ? JSON.parse(jsonText) : [];
           return resolve(predictions);
         } catch (e) {
-          console.error("❌ Python output parse error. stdout was:\n", stdout);
+          console.error("❌ Python output parse error. extracted jsonText was:\n", jsonText.slice(0, 800));
+          console.error("Full raw stdout (first 800 chars):\n", stdout.slice(0, 800));
           return reject(e);
         }
       }
@@ -174,9 +228,9 @@ async function savePredictions(predictions) {
 
     const result = await coll.bulkWrite(bulkOps, { ordered: false });
     console.log(
-      `✅ Upserted ${
-        result.upsertedCount + result.modifiedCount
-      } predictions (after ${lastNoaaDay.toISOString().slice(0, 10)}).`
+      `✅ Upserted ${result.upsertedCount + result.modifiedCount} predictions (after ${lastNoaaDay
+        .toISOString()
+        .slice(0, 10)}).`
     );
   } catch (e) {
     console.error("❌ Error saving predictions:", e.message || e);
@@ -271,12 +325,10 @@ function shiftToTomorrow(docs) {
 
   const shiftDays = Math.round((desiredStart - firstDate) / msPerDay);
 
-  return docs.slice(0, 27).map((d) => {
+  return docs.slice(0, Math.min(27, docs.length)).map((d) => {
     const shifted = { ...mapDoc(d) };
     const origDate = new Date(d.date);
-    shifted.date = new Date(
-      origDate.getTime() + shiftDays * msPerDay
-    ).toISOString();
+    shifted.date = new Date(origDate.getTime() + shiftDays * msPerDay).toISOString();
     return shifted;
   });
 }
@@ -293,12 +345,17 @@ app.get("/api/predictions/lstm", async (_req, res) => {
     if (!lastNoaa.length) {
       return res.status(404).json({ error: "No NOAA data found" });
     }
-    const lastNoaaDate = new Date(lastNoaa[0].date);
 
-    const docs = await lstmCol
-      .find({ date: { $gt: lastNoaaDate } })
-      .sort({ date: 1 })
-      .toArray();
+    const lastNoaaDate = new Date(lastNoaa[0].date);
+    const lastNoaaUTC = new Date(
+      Date.UTC(
+        lastNoaaDate.getUTCFullYear(),
+        lastNoaaDate.getUTCMonth(),
+        lastNoaaDate.getUTCDate()
+      )
+    );
+
+    const docs = await lstmCol.find({ date: { $gt: lastNoaaUTC } }).sort({ date: 1 }).toArray();
 
     if (!docs.length) {
       return res.status(404).json({ error: "No future LSTM forecast data found" });
@@ -331,9 +388,7 @@ app.get("/api/predictions/combined", async (_req, res) => {
     const lstmCol = mongoose.connection.db.collection("forecast_lstm_27day");
     const noaaDocs = await noaaCol.find({}).sort({ date: 1 }).toArray();
     const lstmDocs = await lstmCol.find({}).sort({ date: 1 }).toArray();
-    const all = [...noaaDocs, ...lstmDocs].sort(
-      (a, b) => new Date(a.date) - new Date(b.date)
-    );
+    const all = [...noaaDocs, ...lstmDocs].sort((a, b) => new Date(a.date) - new Date(b.date));
     res.json(all.map(mapDoc));
   } catch (e) {
     res.status(500).json({ error: e.message || "Failed to fetch combined forecast" });

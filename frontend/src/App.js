@@ -9,34 +9,28 @@ import {
   ThemeProvider,
   Button,
 } from "@mui/material";
-import { isWithinInterval } from "date-fns";
+import { isWithinInterval, startOfDay, endOfDay } from "date-fns";
 
 import LSTMForecastTable from "./components/LSTMForecastTable";
 import ForecastCharts from "./components/ForecastCharts";
 import ForecastBarCharts from "./components/ForecastBarCharts";
 import DateRangeFilter from "./components/DateRangeFilter";
 
-import { fetchJSON } from "./utils/api"; // helper that prepends API_URL + validates JSON
+import { fetchJSON } from "./utils/api";
 
-// Helper: try endpoints in order and return first non-empty array
-async function fetchWithFallbackOrder(order = [
-  "/api/predictions/lstm",
-  "/api/predictions/combined",
-  "/api/predictions/27day"
-]) {
-  for (const path of order) {
-    try {
-      const res = await fetchJSON(path);
-      if (Array.isArray(res) && res.length > 0) {
-        console.log("Using endpoint:", path);
-        return res;
-      }
-    } catch (err) {
-      console.warn("Endpoint failed:", path, err && err.message ? err.message : err);
-      // try next
+// ✅ Always fetch future-only forecasts (LSTM)
+async function fetchForecastData() {
+  try {
+    const res = await fetchJSON("/api/predictions/lstm");
+    if (Array.isArray(res) && res.length > 0) {
+      console.log("✅ Using endpoint: /api/predictions/lstm");
+      return res;
+    } else {
+      console.warn("⚠️ LSTM endpoint returned empty array");
     }
+  } catch (err) {
+    console.error("❌ Endpoint failed: /api/predictions/lstm", err.message || err);
   }
-  // all failed or empty, return empty array
   return [];
 }
 
@@ -45,60 +39,61 @@ function App() {
   const [startDate, setStartDate] = useState(null);
   const [endDate, setEndDate] = useState(null);
 
-  // Load data from backend with fallback
+  // Load data from backend
   useEffect(() => {
     (async () => {
       try {
-        const data = await fetchWithFallbackOrder();
+        const data = await fetchForecastData();
+        if (!data.length) {
+          console.warn("⚠️ No forecasts returned from backend.");
+        }
         setForecastData(Array.isArray(data) ? data : []);
       } catch (err) {
-        console.error("Fetch error:", err);
+        console.error("❌ Fetch error:", err);
         setForecastData([]);
       }
     })();
   }, []);
 
-  // Light theme with larger font sizes
   const theme = createTheme({
     palette: {
       mode: "light",
       primary: { main: "#1976d2" },
-      secondary: { main: "#dc004e" },
-      background: {
-        default: "#f5f5f5",
-        paper: "#fff",
-      },
-      text: {
-        primary: "#000",
-        secondary: "#333",
-      },
+      background: { default: "#f5f5f5", paper: "#fff" },
+      text: { primary: "#000" },
     },
     typography: {
       fontFamily: "Orbitron, Roboto, sans-serif",
       h3: { fontSize: "3rem" },
-      subtitle1: { fontSize: "1.5rem" },
-      body1: { fontSize: "1.2rem" },
-      button: { fontSize: "1.1rem" },
     },
   });
 
   const handleDataLoaded = useCallback((data) => {
-    console.log("Data loaded:", data);
+    console.log("📡 Forecast data loaded:", data);
   }, []);
 
+  // ✅ Ensure sorted data
   const sortedByDate = [...forecastData].sort(
     (a, b) => new Date(a.date) - new Date(b.date)
   );
-  const last27 = sortedByDate.slice(-27);
 
-  const filteredData = last27.filter((item) => {
+  // ✅ Improved filtering (normalize start/end of day)
+  const filteredData = sortedByDate.filter((item) => {
     const itemDate = new Date(item.date);
-    return (
-      (!startDate && !endDate) ||
-      (startDate &&
-        endDate &&
-        isWithinInterval(itemDate, { start: startDate, end: endDate }))
-    );
+
+    if (startDate && endDate) {
+      return isWithinInterval(itemDate, {
+        start: startOfDay(startDate),
+        end: endOfDay(endDate),
+      });
+    }
+    if (startDate && !endDate) {
+      return itemDate >= startOfDay(startDate);
+    }
+    if (!startDate && endDate) {
+      return itemDate <= endOfDay(endDate);
+    }
+    return true;
   });
 
   const clearFilters = () => {
@@ -109,13 +104,7 @@ function App() {
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <Box
-        sx={{
-          backgroundColor: theme.palette.background.default,
-          minHeight: "100vh",
-          py: 6,
-        }}
-      >
+      <Box sx={{ backgroundColor: theme.palette.background.default, minHeight: "100vh", py: 6 }}>
         <Container
           maxWidth="lg"
           sx={{
@@ -126,7 +115,7 @@ function App() {
             px: { xs: 2, md: 4 },
           }}
         >
-          {/* Header with CoralComp Logo */}
+          {/* ✅ Fixed Header */}
           <Box display="flex" alignItems="center" justifyContent="center" mb={4}>
             <Box
               component="img"

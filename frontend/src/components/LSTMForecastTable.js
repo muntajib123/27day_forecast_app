@@ -1,7 +1,6 @@
 // src/components/LSTMForecastTable.js
 import React, { useEffect, useState } from "react";
 import { format } from "date-fns";
-import ClipLoader from "react-spinners/ClipLoader";
 import {
   Box,
   Typography,
@@ -12,80 +11,50 @@ import {
 import WbSunnyIcon from "@mui/icons-material/WbSunny";
 import BoltIcon from "@mui/icons-material/Bolt";
 import SignalCellularAltIcon from "@mui/icons-material/SignalCellularAlt";
-import { fetchJSON } from "../utils/api"; // ✅ use fetch helper
 
-// Utility to format date
+/*
+Props:
+  - data: Array of forecast objects (already fetched & filtered by App)
+  - onDataLoaded: optional callback invoked with the array displayed
+  - lightMode: optional (not used here but accepted)
+*/
+
 const formatDateUTC = (rawDate) => {
   const date = new Date(rawDate);
   return format(date, "MMM dd, yyyy");
 };
 
-// local fallback function (tries LSTM, then combined, then 27day)
-async function loadForecastWithFallback() {
-  const order = [
-    "/api/predictions/lstm",
-    "/api/predictions/combined",
-    "/api/predictions/27day",
-  ];
-  for (const p of order) {
-    try {
-      const res = await fetchJSON(p);
-      if (Array.isArray(res) && res.length > 0) {
-        console.log("LSTM table using", p);
-        return res;
-      }
-    } catch (err) {
-      console.warn("Endpoint failed:", p, err && err.message ? err.message : err);
-    }
-  }
-  return [];
-}
+const formatNumber = (v) =>
+  typeof v === "number" && !Number.isNaN(v) ? v.toFixed(1) : v;
 
-const LSTMForecastTable = ({ onDataLoaded }) => {
-  const [data, setData] = useState([]);
-  const [loading, setLoading] = useState(true);
+// nicer Kp color scale
+const kpColorFor = (kp) => {
+  if (typeof kp !== "number" || Number.isNaN(kp)) return "#ff6f00"; // default orange
+  if (kp >= 7) return "#b71c1c"; // very strong - deep red
+  if (kp >= 5) return "#d84315"; // stormy - red/orange
+  if (kp >= 3) return "#ff9800"; // moderate - orange
+  return "#66bb6a"; // calm - green
+};
+
+const LSTMForecastTable = ({ data = [], onDataLoaded }) => {
+  const [local, setLocal] = useState([]);
 
   useEffect(() => {
-    let mounted = true;
-    (async () => {
-      try {
-        const forecast = await loadForecastWithFallback();
-        if (!mounted) return;
-        setData(forecast);
-        if (onDataLoaded) onDataLoaded(forecast);
-      } catch (err) {
-        console.error("Error fetching LSTM forecast:", err);
-        if (mounted) setData([]);
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    })();
-    return () => { mounted = false; };
-  }, [onDataLoaded]);
+    const arr = Array.isArray(data) ? [...data] : [];
+    // sort by date ascending, then take up to 27 items
+    arr.sort((a, b) => new Date(a.date) - new Date(b.date));
+    const sliced = arr.slice(0, 27);
+    setLocal(sliced);
+    if (onDataLoaded) onDataLoaded(sliced);
+  }, [data, onDataLoaded]);
 
-  if (loading) {
-    return (
-      <Box sx={{ textAlign: "center", py: 5 }}>
-        <ClipLoader size={35} color="#1976d2" />
-        <Typography variant="body2" sx={{ mt: 1, color: "#777" }}>
-          Loading forecast data...
-        </Typography>
-      </Box>
-    );
-  }
-
-  if (!data || data.length === 0) {
+  if (!local || local.length === 0) {
     return (
       <Typography variant="h6" align="center" sx={{ mt: 4, color: "#777" }}>
-        No LSTM forecast data available.
+        No forecast data available for the selected date range.
       </Typography>
     );
   }
-
-  const filtered = [...data]
-    .filter((item) => item.date)
-    .sort((a, b) => new Date(a.date) - new Date(b.date))
-    .slice(0, 27);
 
   return (
     <Box
@@ -103,23 +72,34 @@ const LSTMForecastTable = ({ onDataLoaded }) => {
         gutterBottom
         sx={{ color: "#0a0f2c", fontWeight: "bold", mb: 4 }}
       >
-        27-Day Space Weather Forecast (LSTM Model)
+        27-Day Space Weather Forecast
       </Typography>
 
       <Grid container spacing={3} justifyContent="center">
-        {filtered.map((item, idx) => {
-          const flux = item.f107 || item.radio_flux;
-          const apIndex = item.a_index;
-          const kpIndex = item.kp_max || item.kp_index;
+        {local.map((item, idx) => {
+          const fluxRaw = item.f107 ?? item.radio_flux ?? null;
+          const apRaw = item.a_index ?? item.ap_index ?? null;
+          const kpRaw = item.kp_max ?? item.kp_index ?? null;
+
+          // coerce to number if possible
+          const flux = typeof fluxRaw === "number" ? fluxRaw : Number(fluxRaw);
+          const apIndex = typeof apRaw === "number" ? apRaw : Number(apRaw);
+          const kpIndex = typeof kpRaw === "number" ? kpRaw : Number(kpRaw);
+
+          const displayFlux = formatNumber(flux);
+          const displayAp = formatNumber(apIndex);
+          const displayKp = formatNumber(kpIndex);
+
+          const kpColor = kpColorFor(kpIndex);
 
           return (
-            <Grid item xs={12} sm={6} md={4} key={idx}>
+            <Grid item xs={12} sm={6} md={4} key={item.date + "-" + idx}>
               <Card
                 sx={{
                   backgroundColor: "#f9f9f9",
                   color: "#000",
                   borderRadius: 3,
-                  boxShadow: "0 0 10px rgba(0,0,0,0.1)",
+                  boxShadow: "0 0 10px rgba(0,0,0,0.08)",
                 }}
               >
                 <CardContent>
@@ -128,29 +108,30 @@ const LSTMForecastTable = ({ onDataLoaded }) => {
                     {formatDateUTC(item.date)}
                   </Typography>
 
-                  <Typography variant="body2" gutterBottom>
+                  <Typography variant="body2" gutterBottom sx={{ display: "flex", alignItems: "center" }}>
                     <SignalCellularAltIcon sx={{ mr: 1, color: "#00e5ff" }} />
-                    <strong>Radio Flux:</strong> {flux}
+                    <strong style={{ marginRight: 6 }}>Radio Flux:</strong>{" "}
+                    <span>{displayFlux ?? "—"}</span>
                   </Typography>
 
-                  <Typography variant="body2" gutterBottom>
+                  <Typography variant="body2" gutterBottom sx={{ display: "flex", alignItems: "center" }}>
                     <WbSunnyIcon
                       sx={{
                         mr: 1,
-                        color: apIndex >= 20 ? "orange" : "#64dd17",
+                        color:
+                          typeof apIndex === "number" && apIndex >= 20
+                            ? "orange"
+                            : "#64dd17",
                       }}
                     />
-                    <strong>Ap Index:</strong> {apIndex}
+                    <strong style={{ marginRight: 6 }}>Ap Index:</strong>{" "}
+                    <span>{displayAp ?? "—"}</span>
                   </Typography>
 
-                  <Typography variant="body2">
-                    <BoltIcon
-                      sx={{
-                        mr: 1,
-                        color: kpIndex >= 5 ? "red" : "#ff6f00",
-                      }}
-                    />
-                    <strong>Kp Index:</strong> {kpIndex}
+                  <Typography variant="body2" sx={{ display: "flex", alignItems: "center" }}>
+                    <BoltIcon sx={{ mr: 1, color: kpColor }} />
+                    <strong style={{ marginRight: 6 }}>Kp Index:</strong>{" "}
+                    <span style={{ color: kpColor }}>{displayKp ?? "—"}</span>
                   </Typography>
                 </CardContent>
               </Card>
