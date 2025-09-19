@@ -13,8 +13,12 @@ from tensorflow.keras.layers import Input, LSTM, RepeatVector, TimeDistributed, 
 from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau, ModelCheckpoint
 import joblib
 
-# Config
-MONGO_URL = "mongodb://localhost:27018/"
+# ===================== Config =====================
+# ✅ Use Atlas URI if available, otherwise fallback to localhost for local dev
+MONGO_URL = os.getenv(
+    "MONGODB_URI",
+    "mongodb://localhost:27018/"
+)
 DB_NAME = "noaa_database"
 HIST_COLLECTION = "forecast_lstm_27day"
 NOAA_URL = "https://services.swpc.noaa.gov/text/27-day-outlook.txt"
@@ -24,7 +28,7 @@ MODEL_FILE = os.path.join(BASE_DIR, "trained_lstm.keras")   # ✅ only native ke
 SCALER_FILE = os.path.join(BASE_DIR, "scaler.save")
 RES_SCALER_FILE = os.path.join(BASE_DIR, "residual_scaler.save")
 
-# Helpers
+# ===================== Helpers =====================
 def fetch_noaa_text():
     try:
         r = requests.get(NOAA_URL, timeout=15)
@@ -93,7 +97,7 @@ def build_encoder_decoder(window, n_features, n_targets, latent=128):
     model.compile(optimizer="adam", loss="mse", metrics=["mae"])
     return model
 
-# Main
+# ===================== Main =====================
 def main():
     noaa_text = fetch_noaa_text()
     noaa_df = parse_noaa_text(noaa_text)
