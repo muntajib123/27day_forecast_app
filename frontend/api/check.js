@@ -1,22 +1,14 @@
-// api/check.js
-import jwt from "jsonwebtoken";
-
-const JWT_SECRET = process.env.JWT_SECRET || "dev-secret";
-const COOKIE_NAME = "coral_auth";
-
+﻿// api/check.js
 export default function handler(req, res) {
-  const cookieHeader = req.headers.cookie || "";
-  const cookie = cookieHeader.split(";").map(s => s.trim()).find(s => s.startsWith(`${COOKIE_NAME}=`));
-
-  if (!cookie) {
-    return res.status(200).json({ auth: false });
-  }
-
-  const token = cookie.split("=")[1];
   try {
-    jwt.verify(token, JWT_SECRET);
-    return res.status(200).json({ auth: true });
-  } catch (err) {
+    const cookieHeader = req.headers.cookie || "";
+    const match = cookieHeader.split(";").map(s => s.trim()).find(s => s.startsWith("coral_auth="));
+    if (!match) return res.status(200).json({ auth: false });
+    const value = match.split("=")[1];
+    if (value === "1") return res.status(200).json({ auth: true });
     return res.status(200).json({ auth: false });
+  } catch (err) {
+    console.error("check error:", err);
+    return res.status(500).json({ auth: false });
   }
 }
