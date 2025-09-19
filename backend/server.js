@@ -1,4 +1,4 @@
-// backend/server.js (fixed: robust JSON extraction from Python stdout)
+// backend/server.js (fixed: robust JSON extraction + Mongo URI logging)
 const express = require("express");
 const cors = require("cors");
 const cron = require("node-cron");
@@ -33,10 +33,11 @@ const SKIP_STARTUP_RUN =
   (process.env.SKIP_STARTUP_RUN || "false").toLowerCase() === "true";
 
 // ===== Connect MongoDB =====
+console.log("📡 Connecting to MongoDB URI:", mongoURL);
 mongoose
   .connect(mongoURL)
   .then(() => {
-    console.log("✅ MongoDB connected");
+    console.log("✅ MongoDB connected:", mongoURL.includes("mongodb+srv") ? "Atlas" : "Local");
     (async () => {
       try {
         const { updateNOAA27Day } = require("./noaa27");
@@ -91,7 +92,6 @@ async function runLSTM() {
         let jsonText = null;
         const candidates = [];
 
-        // collect candidate JSON blocks by looking for [ ... ] and { ... } spans
         for (const openChar of ["[", "{"]) {
           let idx = stdout.indexOf(openChar);
           while (idx !== -1) {
@@ -104,30 +104,28 @@ async function runLSTM() {
           }
         }
 
-        // also prefer JSON that starts on a new line (common when print() outputs JSON on its own line)
         const nlIdx = stdout.lastIndexOf("\n[");
         if (nlIdx !== -1) candidates.push(stdout.slice(nlIdx + 1).trim());
         const nlIdx2 = stdout.lastIndexOf("\n{");
         if (nlIdx2 !== -1) candidates.push(stdout.slice(nlIdx2 + 1).trim());
 
-        // pick the first candidate that parses and looks like the expected shape (contains "date" field)
         for (const c of candidates) {
           if (!c) continue;
           try {
             const parsed = JSON.parse(c);
             const ok =
-              (Array.isArray(parsed) && parsed.length && parsed[0] && parsed[0].date) ||
+              (Array.isArray(parsed) &&
+                parsed.length &&
+                parsed[0] &&
+                parsed[0].date) ||
               (parsed && (parsed.forecasts || parsed.date));
             if (ok) {
               jsonText = c;
               break;
             }
-          } catch (err) {
-            // ignore parse errors for this candidate
-          }
+          } catch (err) {}
         }
 
-        // fallback to the simple regex (last resort)
         if (!jsonText) {
           const match = stdout.match(/(\[|\{)[\s\S]*(\]|\})/);
           jsonText = match ? match[0] : stdout.trim();
@@ -140,7 +138,6 @@ async function runLSTM() {
           );
           return reject(new Error("No JSON found in python stdout"));
         }
-        // === end extraction ===
 
         try {
           const predictions = jsonText ? JSON.parse(jsonText) : [];
@@ -172,7 +169,6 @@ async function savePredictions(predictions) {
       )
     );
 
-    // filter strictly > lastNOAADate
     const futurePredictions = Array.isArray(predictions)
       ? predictions.filter((p) => {
           const pd = new Date(p.date);
@@ -189,8 +185,6 @@ async function savePredictions(predictions) {
     }
 
     const coll = mongoose.connection.db.collection("forecast_lstm_27day");
-
-    // cleanup: remove overlapping docs
     const deleteRes = await coll.deleteMany({ date: { $lte: lastNoaaDay } });
     if (deleteRes.deletedCount > 0) {
       console.log(
@@ -214,7 +208,6 @@ async function savePredictions(predictions) {
               f107: p.f107,
               a_index: p.a_index,
               kp_max: p.kp_max,
-              // normalized
               radio_flux: p.f107,
               ap_index: p.a_index,
               kp_index: p.kp_max,
@@ -302,7 +295,6 @@ function mapDoc(d) {
     f107: d.f107,
     a_index: d.a_index,
     kp_max: d.kp_max,
-    // normalized
     radio_flux: d.radio_flux ?? d.f107,
     ap_index: d.ap_index ?? d.a_index,
     kp_index: d.kp_index ?? d.kp_max,
@@ -310,19 +302,15 @@ function mapDoc(d) {
   };
 }
 
-// helper: shift docs so forecast starts from tomorrow (UTC)
 function shiftToTomorrow(docs) {
   if (!docs.length) return [];
-
   const msPerDay = 24 * 60 * 60 * 1000;
-
   const firstDate = new Date(docs[0].date);
   const now = new Date();
   const todayUtc = new Date(
     Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0)
   );
   const desiredStart = new Date(todayUtc.getTime() + msPerDay);
-
   const shiftDays = Math.round((desiredStart - firstDate) / msPerDay);
 
   return docs.slice(0, Math.min(27, docs.length)).map((d) => {
@@ -333,34 +321,25 @@ function shiftToTomorrow(docs) {
   });
 }
 
-// ===== Forecast APIs =====
-
-// LSTM forecasts (future only, after last NOAA date)
+// LSTM forecasts
 app.get("/api/predictions/lstm", async (_req, res) => {
   try {
     const noaaCol = mongoose.connection.db.collection("forecast_27day");
     const lstmCol = mongoose.connection.db.collection("forecast_lstm_27day");
-
     const lastNoaa = await noaaCol.find({}).sort({ date: -1 }).limit(1).toArray();
     if (!lastNoaa.length) {
       return res.status(404).json({ error: "No NOAA data found" });
     }
-
     const lastNoaaDate = new Date(lastNoaa[0].date);
-    const lastNoaaUTC = new Date(
-      Date.UTC(
-        lastNoaaDate.getUTCFullYear(),
-        lastNoaaDate.getUTCMonth(),
-        lastNoaaDate.getUTCDate()
-      )
-    );
-
+    const lastNoaaUTC = new Date(Date.UTC(
+      lastNoaaDate.getUTCFullYear(),
+      lastNoaaDate.getUTCMonth(),
+      lastNoaaDate.getUTCDate()
+    ));
     const docs = await lstmCol.find({ date: { $gt: lastNoaaUTC } }).sort({ date: 1 }).toArray();
-
     if (!docs.length) {
       return res.status(404).json({ error: "No future LSTM forecast data found" });
     }
-
     res.json(docs.map(mapDoc));
   } catch (e) {
     console.error("Error /api/predictions/lstm:", e);
@@ -368,7 +347,7 @@ app.get("/api/predictions/lstm", async (_req, res) => {
   }
 });
 
-// NOAA shifted forecasts (start tomorrow)
+// NOAA shifted forecasts
 app.get("/api/predictions/27day", async (_req, res) => {
   try {
     const col = mongoose.connection.db.collection("forecast_27day");
@@ -381,7 +360,7 @@ app.get("/api/predictions/27day", async (_req, res) => {
   }
 });
 
-// Combined forecasts (no shifting here)
+// Combined forecasts
 app.get("/api/predictions/combined", async (_req, res) => {
   try {
     const noaaCol = mongoose.connection.db.collection("forecast_27day");
